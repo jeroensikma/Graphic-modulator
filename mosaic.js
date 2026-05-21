@@ -64,7 +64,7 @@ const mosaicModulator = {
 
       p.setup = () => {
         p.pixelDensity(1);
-        const size = Math.min(window.innerWidth - 32, 720);
+        const size = Math.min(window.innerWidth - 48, 712);
         const cvs  = p.createCanvas(size, size);
         cvs.parent(canvasEl);
         p.colorMode(p.RGB, 255);
@@ -143,7 +143,7 @@ const mosaicModulator = {
       }
 
       p.windowResized = () => {
-        const size = Math.min(window.innerWidth - 32, 720);
+        const size = Math.min(window.innerWidth - 48, 712);
         p.resizeCanvas(size, size);
         if (origImg) processImage(origImg);
       };
