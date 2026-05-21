@@ -7,12 +7,10 @@ const mosaicModulator = {
 
   init(canvasEl, controlsEl) {
     const PARAMS = {
-      tileSize:   { label: 'Tile Size',   min: 4,   max: 80,   value: 20,   step: 1,    fmt: v => Math.round(v) + 'px' },
-      gap:        { label: 'Gap',         min: 0,   max: 12,   value: 2,    step: 0.5,  fmt: v => v.toFixed(1) + 'px' },
-      radius:     { label: 'Roundness',   min: 0,   max: 1,    value: 0.2,  step: 0.05, fmt: v => Math.round(v * 100) + '%' },
-      activeSize: { label: 'Active Size', min: 10,  max: 400,  value: 60,   step: 5,    fmt: v => Math.round(v) + 'px' },
-      amount:     { label: 'Amount',      min: 1,   max: 40,   value: 5,    step: 1,    fmt: v => Math.round(v) },
-      duration:   { label: 'Duration',    min: 100, max: 6000, value: 1200, step: 100,  fmt: v => (v / 1000).toFixed(1) + 's' },
+      tileSize:   { label: 'Tile Size',   min: 4,    max: 80,   value: 20,   step: 1,   fmt: v => Math.round(v) + 'px' },
+      activeSize: { label: 'Active Size', min: 1,    max: 10,   value: 3,    step: 1,   fmt: v => Math.round(v) + '×' },
+      amount:     { label: 'Amount',      min: 1,    max: 20,   value: 5,    step: 1,   fmt: v => Math.round(v) },
+      duration:   { label: 'Duration',    min: 1000, max: 4000, value: 1200, step: 100, fmt: v => (v / 1000).toFixed(1) + 's' },
     };
 
     buildControls(PARAMS, controlsEl);
@@ -108,15 +106,12 @@ const mosaicModulator = {
 
         p.background(14, 14, 14);
 
-        const tileSize   = Math.max(2, PARAMS.tileSize.value);
-        const gap        = PARAMS.gap.value;
-        const step       = tileSize + gap;
-        const radiusPx   = tileSize * PARAMS.radius.value * 0.5;
-        const cols       = Math.ceil(p.width  / step) + 1;
-        const rows       = Math.ceil(p.height / step) + 1;
+        const tileSize = Math.max(2, PARAMS.tileSize.value);
+        const cols     = Math.ceil(p.width  / tileSize) + 1;
+        const rows     = Math.ceil(p.height / tileSize) + 1;
         const now      = p.millis();
         const duration = PARAMS.duration.value;
-        const bigSize  = PARAMS.activeSize.value;
+        const bigSize  = tileSize * Math.round(PARAMS.activeSize.value);
         const target   = Math.round(PARAMS.amount.value);
 
         // Expire tiles that have been active longer than duration
@@ -137,14 +132,12 @@ const mosaicModulator = {
           for (let col = 0; col < cols; col++) {
             if (activeTiles.has(`${col},${row}`)) continue;
 
-            const px = col * step;
-            const py = row * step;
-            const cx = px + tileSize * 0.5;
-            const cy = py + tileSize * 0.5;
-            const [r, g, b] = sampleColor(cx, cy);
+            const px = col * tileSize;
+            const py = row * tileSize;
+            const [r, g, b] = sampleColor(px + tileSize * 0.5, py + tileSize * 0.5);
 
             p.fill(r, g, b);
-            p.rect(px, py, tileSize, tileSize, radiusPx);
+            p.rect(px, py, tileSize, tileSize);
           }
         }
 
@@ -153,17 +146,14 @@ const mosaicModulator = {
           const [col, row] = key.split(',').map(Number);
           if (col >= cols || row >= rows) continue;
 
-          const px        = col * step;
-          const py        = row * step;
-          const cx        = px + tileSize * 0.5;
-          const cy        = py + tileSize * 0.5;
-          const bigRadius = bigSize * PARAMS.radius.value * 0.5;
-          const [r, g, b] = sampleColor(cx, cy);
+          const px        = col * tileSize;
+          const py        = row * tileSize;
+          const [r, g, b] = sampleColor(px + tileSize * 0.5, py + tileSize * 0.5);
 
           p.fill(r, g, b);
           p.stroke(0);
           p.strokeWeight(1.5);
-          p.rect(px, py, bigSize, bigSize, bigRadius);
+          p.rect(px, py, bigSize, bigSize);
           p.noStroke();
         }
       };
