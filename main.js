@@ -29,5 +29,3 @@ MODULATORS.forEach((mod, i) => {
 select.addEventListener('change', () => {
   switchTo(MODULATORS[select.value]);
 });
-
-switchTo(MODULATORS[0]);
