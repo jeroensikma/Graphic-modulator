@@ -7,11 +7,12 @@ const mosaicModulator = {
 
   init(canvasEl, controlsEl) {
     const PARAMS = {
-      tileSize:   { label: 'Tile Size',   min: 0,    max: 80,   value: 20,   step: 1,    fmt: v => Math.round(v) + 'px' },
-      activeSize: { label: 'Active Size', min: 1,    max: 10,   value: 3,    step: 1,    fmt: v => Math.round(v) + '×' },
-      amount:     { label: 'Amount',      min: 1,    max: 20,   value: 5,    step: 1,    fmt: v => Math.round(v) },
-      randomness: { label: 'Randomness',  min: 0,    max: 1,    value: 0,    step: 0.01, fmt: v => Math.round(v * 100) + '%' },
-      duration:   { label: 'Duration',    min: 1000, max: 4000, value: 1200, step: 100,  fmt: v => (v / 1000).toFixed(1) + 's' },
+      tileSize:      { label: 'Tile Size',         min: 1,    max: 80,   value: 20,   step: 1,    fmt: v => Math.round(v) + 'px' },
+      activeSize:    { label: 'Active Size',        min: 1,    max: 100,  value: 3,    step: 1,    fmt: v => Math.round(v) + '×' },
+      amount:        { label: 'Amount',             min: 1,    max: 20,   value: 5,    step: 1,    fmt: v => Math.round(v) },
+      randomness:    { label: 'Size Randomness',    min: 0,    max: 1,    value: 0,    step: 0.01, fmt: v => Math.round(v * 100) + '%' },
+      timingRandom:  { label: 'Timing Randomness',  min: 0,    max: 1,    value: 0,    step: 0.01, fmt: v => Math.round(v * 100) + '%' },
+      duration:      { label: 'Duration',           min: 1000, max: 4000, value: 1200, step: 100,  fmt: v => (v / 1000).toFixed(1) + 's' },
     };
 
     buildControls(PARAMS, controlsEl);
@@ -109,29 +110,30 @@ const mosaicModulator = {
 
         p.background(14, 14, 14);
 
-        const tileSize  = Math.round(PARAMS.tileSize.value);
-        const baseMult  = Math.round(PARAMS.activeSize.value);
-        const randomness = PARAMS.randomness.value;
-        const target    = Math.round(PARAMS.amount.value);
-        const now       = p.millis();
-        const duration  = PARAMS.duration.value;
-
-        // Nothing to draw if tiles are hidden
-        if (tileSize < 1) return;
+        const tileSize    = Math.round(PARAMS.tileSize.value);
+        const baseMult    = Math.round(PARAMS.activeSize.value);
+        const randomness  = PARAMS.randomness.value;
+        const timingRnd   = PARAMS.timingRandom.value;
+        const target      = Math.round(PARAMS.amount.value);
+        const now         = p.millis();
+        const duration    = PARAMS.duration.value;
 
         const cols = Math.ceil(p.width  / tileSize) + 1;
         const rows = Math.ceil(p.height / tileSize) + 1;
 
-        // Expire tiles older than duration
+        // Expire tiles — each tile has its own duration derived from its stored
+        // td factor (0.1–1.0) blended with the timing randomness slider.
+        // td=1 → full duration; td=0.1 → 10% of duration; blend controlled by slider.
         for (const [key, data] of activeTiles) {
-          if (now - data.startTime > duration) activeTiles.delete(key);
+          const tileDuration = duration * (1 + (data.td - 1) * timingRnd);
+          if (now - data.startTime > tileDuration) activeTiles.delete(key);
         }
 
         // Add one new tile per frame until target count is reached
         if (activeTiles.size < target) {
           const col = Math.floor(p.random(cols));
           const row = Math.floor(p.random(rows));
-          activeTiles.set(`${col},${row}`, { startTime: now, rf: p.random() });
+          activeTiles.set(`${col},${row}`, { startTime: now, rf: p.random(), td: p.random(0.1, 1.0) });
         }
 
         // Pass 1 — regular tiles, skipping active positions
