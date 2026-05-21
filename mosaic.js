@@ -7,10 +7,11 @@ const mosaicModulator = {
 
   init(canvasEl, controlsEl) {
     const PARAMS = {
-      tileSize:   { label: 'Tile Size',   min: 4,    max: 80,   value: 20,   step: 1,   fmt: v => Math.round(v) + 'px' },
-      activeSize: { label: 'Active Size', min: 1,    max: 10,   value: 3,    step: 1,   fmt: v => Math.round(v) + '×' },
-      amount:     { label: 'Amount',      min: 1,    max: 20,   value: 5,    step: 1,   fmt: v => Math.round(v) },
-      duration:   { label: 'Duration',    min: 1000, max: 4000, value: 1200, step: 100, fmt: v => (v / 1000).toFixed(1) + 's' },
+      tileSize:   { label: 'Tile Size',   min: 0,    max: 80,   value: 20,   step: 1,    fmt: v => Math.round(v) + 'px' },
+      activeSize: { label: 'Active Size', min: 1,    max: 10,   value: 3,    step: 1,    fmt: v => Math.round(v) + '×' },
+      amount:     { label: 'Amount',      min: 1,    max: 20,   value: 5,    step: 1,    fmt: v => Math.round(v) },
+      randomness: { label: 'Randomness',  min: 0,    max: 1,    value: 0,    step: 0.01, fmt: v => Math.round(v * 100) + '%' },
+      duration:   { label: 'Duration',    min: 1000, max: 4000, value: 1200, step: 100,  fmt: v => (v / 1000).toFixed(1) + 's' },
     };
 
     buildControls(PARAMS, controlsEl);
@@ -34,11 +35,13 @@ const mosaicModulator = {
     controlsEl.appendChild(uploadWrapper);
 
     this._p5 = new p5((p) => {
-      let srcPixels  = null;
-      let srcW       = 0;
-      let origImg    = null;
+      let srcPixels = null;
+      let srcW      = 0;
+      let origImg   = null;
 
-      // key: 'col,row'  value: millis() when the tile was activated
+      // key: 'col,row'  value: { startTime, rf }
+      // rf (random factor 0–1) is fixed at activation time so each tile's
+      // size stays stable for its lifetime regardless of slider changes.
       const activeTiles = new Map();
 
       function processImage(img) {
@@ -106,48 +109,56 @@ const mosaicModulator = {
 
         p.background(14, 14, 14);
 
-        const tileSize = Math.max(2, PARAMS.tileSize.value);
-        const cols     = Math.ceil(p.width  / tileSize) + 1;
-        const rows     = Math.ceil(p.height / tileSize) + 1;
-        const now      = p.millis();
-        const duration = PARAMS.duration.value;
-        const bigSize  = tileSize * Math.round(PARAMS.activeSize.value);
-        const target   = Math.round(PARAMS.amount.value);
+        const tileSize  = Math.round(PARAMS.tileSize.value);
+        const baseMult  = Math.round(PARAMS.activeSize.value);
+        const randomness = PARAMS.randomness.value;
+        const target    = Math.round(PARAMS.amount.value);
+        const now       = p.millis();
+        const duration  = PARAMS.duration.value;
 
-        // Expire tiles that have been active longer than duration
-        for (const [key, startTime] of activeTiles) {
-          if (now - startTime > duration) activeTiles.delete(key);
+        // Nothing to draw if tiles are hidden
+        if (tileSize < 1) return;
+
+        const cols = Math.ceil(p.width  / tileSize) + 1;
+        const rows = Math.ceil(p.height / tileSize) + 1;
+
+        // Expire tiles older than duration
+        for (const [key, data] of activeTiles) {
+          if (now - data.startTime > duration) activeTiles.delete(key);
         }
 
-        // Add one new tile per frame until we reach the target amount
+        // Add one new tile per frame until target count is reached
         if (activeTiles.size < target) {
           const col = Math.floor(p.random(cols));
           const row = Math.floor(p.random(rows));
-          activeTiles.set(`${col},${row}`, now);
+          activeTiles.set(`${col},${row}`, { startTime: now, rf: p.random() });
         }
 
-        // Pass 1 — draw all regular tiles, skipping active ones
+        // Pass 1 — regular tiles, skipping active positions
         p.noStroke();
         for (let row = 0; row < rows; row++) {
           for (let col = 0; col < cols; col++) {
             if (activeTiles.has(`${col},${row}`)) continue;
-
             const px = col * tileSize;
             const py = row * tileSize;
             const [r, g, b] = sampleColor(px + tileSize * 0.5, py + tileSize * 0.5);
-
             p.fill(r, g, b);
             p.rect(px, py, tileSize, tileSize);
           }
         }
 
-        // Pass 2 — draw active tiles enlarged and outlined, on top
-        for (const [key] of activeTiles) {
+        // Pass 2 — active tiles enlarged and outlined
+        // Each tile's size is a lerp between baseMult (randomness=0, all same)
+        // and a per-tile random multiple between 1× and baseMult (randomness=1).
+        for (const [key, { rf }] of activeTiles) {
           const [col, row] = key.split(',').map(Number);
           if (col >= cols || row >= rows) continue;
 
-          const px        = col * tileSize;
-          const py        = row * tileSize;
+          const px      = col * tileSize;
+          const py      = row * tileSize;
+          const randMult = 1 + rf * (baseMult - 1);          // 1× … baseMult
+          const mult     = baseMult + (randMult - baseMult) * randomness;
+          const bigSize  = Math.round(tileSize * mult);
           const [r, g, b] = sampleColor(px + tileSize * 0.5, py + tileSize * 0.5);
 
           p.fill(r, g, b);
