@@ -1,75 +1,95 @@
-// p5.js sketch — geometric noise modulator
-// Renders a grid of tiles; each tile's rotation and scale are driven by
-// Perlin noise sampled at a position + time offset.
+// Noise Field modulator — grid of cross+diamond tiles driven by Perlin noise.
 
-let t = 0; // global noise time offset
+const noiseModulator = {
+  name: 'Noise Field',
+  _p5: null,
 
-function setup() {
-  const size = Math.min(windowWidth - 32, 720);
-  const cvs  = createCanvas(size, size);
-  cvs.parent('canvas-wrapper');
-  colorMode(HSB, 360, 100, 100, 100);
-  strokeCap(ROUND);
-  noFill();
-}
+  init(canvasEl, controlsEl) {
+    const PARAMS = {
+      cols:       { label: 'Columns',     min: 4,    max: 40,   value: 16,   step: 1,    fmt: v => Math.round(v) },
+      noiseScale: { label: 'Noise Scale', min: 0.002,max: 0.08, value: 0.02, step: 0.001,fmt: v => v.toFixed(3) },
+      speed:      { label: 'Speed',       min: 0,    max: 0.04, value: 0.008,step: 0.001,fmt: v => v.toFixed(3) },
+      twist:      { label: 'Twist',       min: 0,    max: 6.283,value: 1.2,  step: 0.01, fmt: v => v.toFixed(2) },
+      strokeW:    { label: 'Stroke',      min: 0.2,  max: 4,    value: 1,    step: 0.1,  fmt: v => v.toFixed(1) },
+      brightness: { label: 'Brightness',  min: 80,   max: 255,  value: 200,  step: 1,    fmt: v => Math.round(v) },
+    };
 
-function draw() {
-  background(0, 0, 6);
+    buildControls(PARAMS, controlsEl);
 
-  const cols  = Math.round(PARAMS.cols.value);
-  const ns    = PARAMS.noiseScale.value;
-  const twist = PARAMS.twist.value;
-  const sw    = PARAMS.strokeW.value;
-  const bri   = map(PARAMS.brightness.value, 80, 255, 30, 100);
+    this._p5 = new p5((p) => {
+      let t = 0;
 
-  const tileW = width  / cols;
-  const tileH = height / cols;
+      p.setup = () => {
+        const size = Math.min(window.innerWidth - 32, 720);
+        const cvs  = p.createCanvas(size, size);
+        cvs.parent(canvasEl);
+        p.colorMode(p.HSB, 360, 100, 100, 100);
+        p.strokeCap(p.ROUND);
+        p.noFill();
+      };
 
-  for (let row = 0; row < cols; row++) {
-    for (let col = 0; col < cols; col++) {
-      const cx = (col + 0.5) * tileW;
-      const cy = (row + 0.5) * tileH;
+      p.draw = () => {
+        p.background(0, 0, 6);
 
-      // Three independent noise layers
-      const n1 = noise(col * ns, row * ns, t);
-      const n2 = noise(col * ns + 100, row * ns + 100, t * 0.7);
-      const n3 = noise(col * ns + 200, row * ns + 200, t * 1.3);
+        const cols  = Math.round(PARAMS.cols.value);
+        const ns    = PARAMS.noiseScale.value;
+        const twist = PARAMS.twist.value;
+        const sw    = PARAMS.strokeW.value;
+        const bri   = p.map(PARAMS.brightness.value, 80, 255, 30, 100);
+        const tileW = p.width  / cols;
+        const tileH = p.height / cols;
 
-      const angle = n1 * twist * TWO_PI;
-      const scale = map(n2, 0, 1, 0.15, 0.92);
-      const hue   = map(n3, 0, 1, 0, 300);
+        for (let row = 0; row < cols; row++) {
+          for (let col = 0; col < cols; col++) {
+            const cx = (col + 0.5) * tileW;
+            const cy = (row + 0.5) * tileH;
 
-      const hw = tileW * scale * 0.5;
-      const hh = tileH * scale * 0.5;
+            const n1 = p.noise(col * ns, row * ns, t);
+            const n2 = p.noise(col * ns + 100, row * ns + 100, t * 0.7);
+            const n3 = p.noise(col * ns + 200, row * ns + 200, t * 1.3);
 
-      stroke(hue, 70, bri, 90);
-      strokeWeight(sw);
+            const angle = n1 * twist * p.TWO_PI;
+            const scale = p.map(n2, 0, 1, 0.15, 0.92);
+            const hue   = p.map(n3, 0, 1, 0, 300);
+            const hw    = tileW * scale * 0.5;
+            const hh    = tileH * scale * 0.5;
 
-      push();
-      translate(cx, cy);
-      rotate(angle);
+            p.stroke(hue, 70, bri, 90);
+            p.strokeWeight(sw);
 
-      // Cross shape: two perpendicular lines
-      line(-hw, 0, hw, 0);
-      line(0, -hh, 0, hh);
+            p.push();
+            p.translate(cx, cy);
+            p.rotate(angle);
 
-      // Outer diamond outline
-      const d = min(hw, hh) * 0.75;
-      beginShape();
-      vertex( d,  0);
-      vertex( 0,  d);
-      vertex(-d,  0);
-      vertex( 0, -d);
-      endShape(CLOSE);
+            p.line(-hw, 0, hw, 0);
+            p.line(0, -hh, 0, hh);
 
-      pop();
+            const d = p.min(hw, hh) * 0.75;
+            p.beginShape();
+            p.vertex( d,  0);
+            p.vertex( 0,  d);
+            p.vertex(-d,  0);
+            p.vertex( 0, -d);
+            p.endShape(p.CLOSE);
+
+            p.pop();
+          }
+        }
+
+        t += PARAMS.speed.value;
+      };
+
+      p.windowResized = () => {
+        const size = Math.min(window.innerWidth - 32, 720);
+        p.resizeCanvas(size, size);
+      };
+    });
+  },
+
+  destroy() {
+    if (this._p5) {
+      this._p5.remove();
+      this._p5 = null;
     }
-  }
-
-  t += PARAMS.speed.value;
-}
-
-function windowResized() {
-  const size = Math.min(windowWidth - 32, 720);
-  resizeCanvas(size, size);
-}
+  },
+};
