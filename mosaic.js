@@ -149,18 +149,18 @@ const mosaicModulator = {
           const [col, row] = key.split(',').map(Number);
           if (col >= cols || row >= rows) continue;
 
-          const px             = col * step;
-          const py             = row * step;
-          const cx             = px + tileSize * 0.5;
-          const cy             = py + tileSize * 0.5;
-          const bigSize        = tileSize * scaleMult;
-          const bigRadius      = bigSize * PARAMS.radius.value * 0.5;
-          const [r, g, b]      = sampleColor(cx, cy);
+          const px        = col * step;
+          const py        = row * step;
+          const cx        = px + tileSize * 0.5;
+          const cy        = py + tileSize * 0.5;
+          const bigSize   = tileSize * scaleMult;
+          const bigRadius = bigSize * PARAMS.radius.value * 0.5;
+          const [r, g, b] = sampleColor(cx, cy);
 
           p.fill(r, g, b);
           p.stroke(0);
           p.strokeWeight(1.5);
-          p.rect(cx - bigSize * 0.5, cy - bigSize * 0.5, bigSize, bigSize, bigRadius);
+          p.rect(px, py, bigSize, bigSize, bigRadius);
           p.noStroke();
         }
       };
