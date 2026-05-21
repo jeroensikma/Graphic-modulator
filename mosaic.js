@@ -1,4 +1,5 @@
 // Image Mosaic modulator — slices an uploaded image into a grid of colored rectangles.
+// Active tiles randomly pop to a larger size with an outline for a generative effect.
 
 const mosaicModulator = {
   name: 'Image Mosaic',
@@ -6,9 +7,11 @@ const mosaicModulator = {
 
   init(canvasEl, controlsEl) {
     const PARAMS = {
-      tileSize: { label: 'Tile Size',  min: 4,  max: 80, value: 20, step: 1,    fmt: v => Math.round(v) + 'px' },
-      gap:      { label: 'Gap',        min: 0,  max: 12, value: 2,  step: 0.5,  fmt: v => v.toFixed(1) + 'px' },
-      radius:   { label: 'Roundness',  min: 0,  max: 1,  value: 0.2,step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+      tileSize:    { label: 'Tile Size',    min: 4,   max: 80,   value: 20,   step: 1,    fmt: v => Math.round(v) + 'px' },
+      gap:         { label: 'Gap',          min: 0,   max: 12,   value: 2,    step: 0.5,  fmt: v => v.toFixed(1) + 'px' },
+      radius:      { label: 'Roundness',    min: 0,   max: 1,    value: 0.2,  step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+      activeScale: { label: 'Active Scale', min: 2,   max: 6,    value: 3,    step: 0.1,  fmt: v => v.toFixed(1) + '×' },
+      duration:    { label: 'Duration',     min: 100, max: 6000, value: 1200, step: 100,  fmt: v => (v / 1000).toFixed(1) + 's' },
     };
 
     buildControls(PARAMS, controlsEl);
@@ -32,15 +35,17 @@ const mosaicModulator = {
     controlsEl.appendChild(uploadWrapper);
 
     this._p5 = new p5((p) => {
-      // Pixel buffer sampled at logical canvas resolution (pixelDensity 1).
-      let srcPixels = null;
-      let srcW = 0;
-      let origImg  = null; // kept for re-processing on resize
+      let srcPixels  = null;
+      let srcW       = 0;
+      let origImg    = null;
 
-      // Draw img into an offscreen buffer at canvas size using cover cropping,
-      // then copy its pixel data into srcPixels.
+      // key: 'col,row'  value: millis() when the tile was activated
+      const activeTiles = new Map();
+
       function processImage(img) {
         origImg = img;
+        activeTiles.clear();
+
         const gfx = p.createGraphics(p.width, p.height);
         gfx.pixelDensity(1);
 
@@ -62,22 +67,26 @@ const mosaicModulator = {
         gfx.remove();
       }
 
+      function sampleColor(cx, cy) {
+        const sx  = Math.min(Math.max(Math.floor(cx), 0), srcW - 1);
+        const sy  = Math.min(Math.max(Math.floor(cy), 0), p.height - 1);
+        const idx = (sy * srcW + sx) * 4;
+        return [srcPixels[idx], srcPixels[idx + 1], srcPixels[idx + 2]];
+      }
+
       p.setup = () => {
         p.pixelDensity(1);
         const size = Math.min(window.innerWidth - 48, 712);
         const cvs  = p.createCanvas(size, size);
         cvs.parent(canvasEl);
         p.colorMode(p.RGB, 255);
-        p.noStroke();
 
-        // Drag-and-drop directly onto the canvas
         cvs.drop(file => {
           if (file.type.startsWith('image/')) {
             p.loadImage(file.data, img => processImage(img));
           }
         });
 
-        // File-picker via button
         fileInput.addEventListener('change', () => {
           const file = fileInput.files[0];
           if (!file) return;
@@ -86,59 +95,91 @@ const mosaicModulator = {
             processImage(img);
             URL.revokeObjectURL(url);
           });
-          fileInput.value = ''; // allow re-selecting the same file
+          fileInput.value = '';
         });
       };
 
       p.draw = () => {
-        p.background(14, 14, 14);
-
         if (!srcPixels) {
           drawPlaceholder();
           return;
         }
 
-        const tileSize = Math.max(2, PARAMS.tileSize.value);
-        const gap      = PARAMS.gap.value;
-        const step     = tileSize + gap;
-        const radiusPx = tileSize * PARAMS.radius.value * 0.5;
+        p.background(14, 14, 14);
 
-        const cols = Math.ceil(p.width  / step) + 1;
-        const rows = Math.ceil(p.height / step) + 1;
+        const tileSize   = Math.max(2, PARAMS.tileSize.value);
+        const gap        = PARAMS.gap.value;
+        const step       = tileSize + gap;
+        const radiusPx   = tileSize * PARAMS.radius.value * 0.5;
+        const cols       = Math.ceil(p.width  / step) + 1;
+        const rows       = Math.ceil(p.height / step) + 1;
+        const now        = p.millis();
+        const duration   = PARAMS.duration.value;
+        const scaleMult  = PARAMS.activeScale.value;
 
+        // Expire tiles that have been active longer than duration
+        for (const [key, startTime] of activeTiles) {
+          if (now - startTime > duration) activeTiles.delete(key);
+        }
+
+        // Activate one new random tile per frame
+        const newCol = Math.floor(p.random(cols));
+        const newRow = Math.floor(p.random(rows));
+        activeTiles.set(`${newCol},${newRow}`, now);
+
+        // Pass 1 — draw all regular tiles, skipping active ones
+        p.noStroke();
         for (let row = 0; row < rows; row++) {
           for (let col = 0; col < cols; col++) {
+            if (activeTiles.has(`${col},${row}`)) continue;
+
             const px = col * step;
             const py = row * step;
+            const cx = px + tileSize * 0.5;
+            const cy = py + tileSize * 0.5;
+            const [r, g, b] = sampleColor(cx, cy);
 
-            // Sample from the center of the tile's footprint in the source buffer
-            const cx  = Math.min(Math.floor(px + tileSize * 0.5), srcW - 1);
-            const cy  = Math.min(Math.floor(py + tileSize * 0.5), p.height - 1);
-            const idx = (cy * srcW + cx) * 4;
-
-            p.fill(srcPixels[idx], srcPixels[idx + 1], srcPixels[idx + 2]);
+            p.fill(r, g, b);
             p.rect(px, py, tileSize, tileSize, radiusPx);
           }
+        }
+
+        // Pass 2 — draw active tiles enlarged and outlined, on top
+        for (const [key] of activeTiles) {
+          const [col, row] = key.split(',').map(Number);
+          if (col >= cols || row >= rows) continue;
+
+          const px             = col * step;
+          const py             = row * step;
+          const cx             = px + tileSize * 0.5;
+          const cy             = py + tileSize * 0.5;
+          const bigSize        = tileSize * scaleMult;
+          const bigRadius      = bigSize * PARAMS.radius.value * 0.5;
+          const [r, g, b]      = sampleColor(cx, cy);
+
+          p.fill(r, g, b);
+          p.stroke(0);
+          p.strokeWeight(1.5);
+          p.rect(cx - bigSize * 0.5, cy - bigSize * 0.5, bigSize, bigSize, bigRadius);
+          p.noStroke();
         }
       };
 
       function drawPlaceholder() {
-        p.fill(20);
+        p.background(245, 245, 247);
         p.noStroke();
-        p.rect(0, 0, p.width, p.height);
 
-        // Dashed border via canvas 2D API
         p.drawingContext.save();
-        p.drawingContext.strokeStyle = '#2a2a2a';
+        p.drawingContext.strokeStyle = '#c7c7cc';
         p.drawingContext.lineWidth   = 1;
-        p.drawingContext.setLineDash([6, 5]);
-        p.drawingContext.strokeRect(24, 24, p.width - 48, p.height - 48);
+        p.drawingContext.setLineDash([8, 6]);
+        p.drawingContext.strokeRect(28, 28, p.width - 56, p.height - 56);
         p.drawingContext.restore();
 
-        p.fill(60);
+        p.fill(160);
         p.textAlign(p.CENTER, p.CENTER);
-        p.textSize(12);
-        p.textFont('Courier New');
+        p.textSize(13);
+        p.textFont('-apple-system, BlinkMacSystemFont, Helvetica Neue, Arial, sans-serif');
         p.text('Drop an image here\nor click Upload', p.width / 2, p.height / 2);
       }
 
