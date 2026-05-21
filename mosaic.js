@@ -7,11 +7,12 @@ const mosaicModulator = {
 
   init(canvasEl, controlsEl) {
     const PARAMS = {
-      tileSize:    { label: 'Tile Size',    min: 4,   max: 80,   value: 20,   step: 1,    fmt: v => Math.round(v) + 'px' },
-      gap:         { label: 'Gap',          min: 0,   max: 12,   value: 2,    step: 0.5,  fmt: v => v.toFixed(1) + 'px' },
-      radius:      { label: 'Roundness',    min: 0,   max: 1,    value: 0.2,  step: 0.05, fmt: v => Math.round(v * 100) + '%' },
-      activeScale: { label: 'Active Scale', min: 2,   max: 6,    value: 3,    step: 0.1,  fmt: v => v.toFixed(1) + '×' },
-      duration:    { label: 'Duration',     min: 100, max: 6000, value: 1200, step: 100,  fmt: v => (v / 1000).toFixed(1) + 's' },
+      tileSize:   { label: 'Tile Size',   min: 4,   max: 80,   value: 20,   step: 1,    fmt: v => Math.round(v) + 'px' },
+      gap:        { label: 'Gap',         min: 0,   max: 12,   value: 2,    step: 0.5,  fmt: v => v.toFixed(1) + 'px' },
+      radius:     { label: 'Roundness',   min: 0,   max: 1,    value: 0.2,  step: 0.05, fmt: v => Math.round(v * 100) + '%' },
+      activeSize: { label: 'Active Size', min: 10,  max: 400,  value: 60,   step: 5,    fmt: v => Math.round(v) + 'px' },
+      amount:     { label: 'Amount',      min: 1,   max: 40,   value: 5,    step: 1,    fmt: v => Math.round(v) },
+      duration:   { label: 'Duration',    min: 100, max: 6000, value: 1200, step: 100,  fmt: v => (v / 1000).toFixed(1) + 's' },
     };
 
     buildControls(PARAMS, controlsEl);
@@ -113,19 +114,22 @@ const mosaicModulator = {
         const radiusPx   = tileSize * PARAMS.radius.value * 0.5;
         const cols       = Math.ceil(p.width  / step) + 1;
         const rows       = Math.ceil(p.height / step) + 1;
-        const now        = p.millis();
-        const duration   = PARAMS.duration.value;
-        const scaleMult  = PARAMS.activeScale.value;
+        const now      = p.millis();
+        const duration = PARAMS.duration.value;
+        const bigSize  = PARAMS.activeSize.value;
+        const target   = Math.round(PARAMS.amount.value);
 
         // Expire tiles that have been active longer than duration
         for (const [key, startTime] of activeTiles) {
           if (now - startTime > duration) activeTiles.delete(key);
         }
 
-        // Activate one new random tile per frame
-        const newCol = Math.floor(p.random(cols));
-        const newRow = Math.floor(p.random(rows));
-        activeTiles.set(`${newCol},${newRow}`, now);
+        // Add one new tile per frame until we reach the target amount
+        if (activeTiles.size < target) {
+          const col = Math.floor(p.random(cols));
+          const row = Math.floor(p.random(rows));
+          activeTiles.set(`${col},${row}`, now);
+        }
 
         // Pass 1 — draw all regular tiles, skipping active ones
         p.noStroke();
@@ -153,7 +157,6 @@ const mosaicModulator = {
           const py        = row * step;
           const cx        = px + tileSize * 0.5;
           const cy        = py + tileSize * 0.5;
-          const bigSize   = tileSize * scaleMult;
           const bigRadius = bigSize * PARAMS.radius.value * 0.5;
           const [r, g, b] = sampleColor(cx, cy);
 
